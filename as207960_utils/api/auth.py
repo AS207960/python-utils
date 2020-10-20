@@ -6,6 +6,18 @@ import keycloak
 import jose.jwt
 import dataclasses
 import datetime
+import requests
+
+_pat_certs = None
+
+
+def get_pat_certs():
+    global _pat_certs
+    if not _pat_certs:
+        r = requests.get(f"{django.conf.settings.PAT_URL}/pat_jwks.json", timeout=5)
+        r.raise_for_status()
+        _pat_certs = r.json()
+    return _pat_certs
 
 
 class BearerAuthentication(authentication.BaseAuthentication):
@@ -35,6 +47,54 @@ class BearerAuthentication(authentication.BaseAuthentication):
             user.oidc_profile.expires_before = datetime.datetime.fromtimestamp(claims["exp"])\
                 .replace(tzinfo=datetime.timezone.utc)
             user.oidc_profile.save()
+
+        return user, OAuthToken(token=token, claims=claims)
+
+
+class PATAuthentication(authentication.BaseAuthentication):
+    def authenticate(self, request):
+        token = request.META.get('HTTP_AUTHORIZATION')
+        if not token:
+            return None
+        if not token.startswith("X-AS207960-PAT "):
+            return None
+
+        pat_token = token[len("X-AS207960-PAT "):]
+
+        pat_certs = get_pat_certs()
+        try:
+            jose.jwt.decode(pat_token, pat_certs)
+        except jose.jwt.JWTError:
+            raise exceptions.AuthenticationFailed('Invalid token')
+
+        client_token = django_keycloak_auth.clients.get_access_token()
+        r = requests.post(f"{django.conf.settings.PAT_URL}/verify_pat/", headers={
+            "Authorization": f"Bearer {client_token}",
+        }, timeout=5, data={
+            "token": token
+        })
+        r.raise_for_status()
+        pat_data = r.json()
+
+        if not pat_data.get("active"):
+            raise exceptions.AuthenticationFailed('Invalid token')
+
+        user = get_user_model().objects.filter(username=pat_data["sub"]).first()
+        if not user:
+            raise exceptions.AuthenticationFailed('Invalid token')
+
+        try:
+            token = django_keycloak_auth.clients.get_active_access_token(user.oidc_profile)
+        except django_keycloak_auth.clients.TokensExpired:
+            raise exceptions.AuthenticationFailed('Invalid token')
+
+        certs = django_keycloak_auth.clients.get_openid_connect_client().certs()
+        try:
+            claims = jose.jwt.decode(token, certs, options={
+                "verify_aud": False
+            })
+        except jose.jwt.JWTError:
+            raise exceptions.AuthenticationFailed('Invalid token')
 
         return user, OAuthToken(token=token, claims=claims)
 
