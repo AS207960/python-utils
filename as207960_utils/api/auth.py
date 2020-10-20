@@ -2,6 +2,7 @@ from rest_framework import authentication
 from rest_framework import exceptions
 from django.contrib.auth import get_user_model
 import django_keycloak_auth.clients
+import django.conf
 import keycloak
 import jose.jwt
 import dataclasses
@@ -53,13 +54,13 @@ class BearerAuthentication(authentication.BaseAuthentication):
 
 class PATAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
-        token = request.META.get('HTTP_AUTHORIZATION')
-        if not token:
+        pat_token = request.META.get('HTTP_AUTHORIZATION')
+        if not pat_token:
             return None
-        if not token.startswith("X-AS207960-PAT "):
+        if not pat_token.startswith("X-AS207960-PAT "):
             return None
 
-        pat_token = token[len("X-AS207960-PAT "):]
+        pat_token = pat_token[len("X-AS207960-PAT "):]
 
         pat_certs = get_pat_certs()
         try:
@@ -71,7 +72,7 @@ class PATAuthentication(authentication.BaseAuthentication):
         r = requests.post(f"{django.conf.settings.PAT_URL}/verify_pat/", headers={
             "Authorization": f"Bearer {client_token}",
         }, timeout=5, data={
-            "token": token
+            "token": pat_token
         })
         r.raise_for_status()
         pat_data = r.json()
