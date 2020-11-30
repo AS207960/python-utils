@@ -47,4 +47,6 @@ class RpcClient:
         while self.queue[corr_id] is None:
             time.sleep(0.1)
 
-        return self.queue[corr_id]
+        val = self.queue[corr_id]
+        del self.queue[corr_id]
+        return val
