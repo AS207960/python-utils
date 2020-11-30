@@ -4,8 +4,7 @@ import time
 import uuid
 from django.conf import settings
 
-
-class RpcClient:
+class InnerRpcClient:
     internal_lock = threading.Lock()
     queue = {}
 
@@ -20,7 +19,8 @@ class RpcClient:
         thread.start()
 
     def _process_data_events(self):
-        self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
+        with self.internal_lock:
+            self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
         while True:
             with self.internal_lock:
                 self.connection.process_data_events()
@@ -50,3 +50,20 @@ class RpcClient:
         val = self.queue[corr_id]
         del self.queue[corr_id]
         return val
+
+class RpcClient:
+    def __init__(self):
+        self.storage = threading.local()
+
+    def __get_client(self):
+        existing_client = getattr(self.storage, 'client', None)
+        if existing_client:
+            return existing_client
+        else:
+            new_client = InnerRpcClient()
+            self.storage.client = new_client
+            return new_client
+
+    def call(self, *args, **kwargs):
+        client = self.__get_client()
+        return client.call(*args, **kwargs)
