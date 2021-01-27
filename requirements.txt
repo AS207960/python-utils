@@ -1,4 +1,4 @@
 Django
-git+https://github.com/TheEnbyperor/django-keycloak-auth@0886091191d341fdce3cc7597100b5f97bb1d93e
+git+https://github.com/TheEnbyperor/django-keycloak-auth@3bd854b37737802d844b97cc5abfc01a6e158a2e
 djangorestframework
 requests
