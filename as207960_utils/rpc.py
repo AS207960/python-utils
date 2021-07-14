@@ -4,13 +4,18 @@ import time
 import uuid
 from django.conf import settings
 
+
+class TimeoutError(Exception):
+    pass
+
+
 class InnerRpcClient:
     internal_lock = threading.Lock()
     queue = {}
 
     def __init__(self):
-        parameters = pika.URLParameters(settings.RABBITMQ_RPC_URL)
-        self.connection = pika.BlockingConnection(parameters=parameters)
+        self.parameters = pika.URLParameters(settings.RABBITMQ_RPC_URL)
+        self.connection = pika.BlockingConnection(parameters=self.parameters)
         self.channel = self.connection.channel()
         result = self.channel.queue_declare('', exclusive=True)
         self.callback_queue = result.method.queue
@@ -19,12 +24,16 @@ class InnerRpcClient:
         thread.start()
 
     def _process_data_events(self):
-        with self.internal_lock:
-            self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
         while True:
             with self.internal_lock:
-                self.connection.process_data_events()
-            time.sleep(0.1)
+                self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
+            try:
+                self.channel.start_consuming()
+            except pika.exceptions.ChannelClosed:
+                self.connection = pika.BlockingConnection(parameters=self.parameters)
+                self.channel = self.connection.channel()
+                result = self.channel.queue_declare('', exclusive=True)
+                self.callback_queue = result.method.queue
 
     def _on_response(self, ch, method, props, body):
         self.queue[props.correlation_id] = body
@@ -41,15 +50,24 @@ class InnerRpcClient:
             )
         return corr_id
 
-    def call(self, rpc_queue, payload):
+    def call(self, rpc_queue, payload, timeout=0):
         corr_id = self.send_request(rpc_queue, payload)
 
+        if timeout:
+            end = time.time() + timeout
+        else:
+            end = None
+
         while self.queue[corr_id] is None:
+            if end is not None and time.time() > end:
+                raise TimeoutError()
+            
             time.sleep(0.1)
 
         val = self.queue[corr_id]
         del self.queue[corr_id]
         return val
+
 
 class RpcClient:
     def __init__(self):
