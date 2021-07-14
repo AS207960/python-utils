@@ -61,7 +61,7 @@ class InnerRpcClient:
         while self.queue[corr_id] is None:
             if end is not None and time.time() > end:
                 raise TimeoutError()
-            
+
             time.sleep(0.1)
 
         val = self.queue[corr_id]
