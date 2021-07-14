@@ -2,6 +2,7 @@ import pika
 import threading
 import time
 import uuid
+import traceback
 from django.conf import settings
 
 
@@ -19,21 +20,30 @@ class InnerRpcClient:
         self.channel = self.connection.channel()
         result = self.channel.queue_declare('', exclusive=True)
         self.callback_queue = result.method.queue
+        self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
         thread = threading.Thread(target=self._process_data_events)
         thread.setDaemon(True)
         thread.start()
 
     def _process_data_events(self):
         while True:
-            with self.internal_lock:
-                self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
             try:
-                self.channel.start_consuming()
-            except pika.exceptions.ChannelClosed:
-                self.connection = pika.BlockingConnection(parameters=self.parameters)
-                self.channel = self.connection.channel()
-                result = self.channel.queue_declare('', exclusive=True)
-                self.callback_queue = result.method.queue
+                try:
+                    while True:
+                        with self.internal_lock:
+                            self.connection.process_data_events()
+                        time.sleep(0.1)
+                except pika.exceptions.ConnectionClosed:
+                        with self.internal_lock:
+                            self.connection = pika.BlockingConnection(parameters=self.parameters)
+                            self.channel = self.connection.channel()
+                            result = self.channel.queue_declare('', exclusive=True)
+                            self.callback_queue = result.method.queue
+                            self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
+            except pika.exceptions.AMQPError:
+                traceback.print
+                time.sleep(5)
+                continue
 
     def _on_response(self, ch, method, props, body):
         self.queue[props.correlation_id] = body
