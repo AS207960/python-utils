@@ -34,21 +34,21 @@ class InnerRpcClient:
                             self.connection.process_data_events()
                         time.sleep(0.1)
                 except pika.exceptions.ConnectionClosed:
-                        with self.internal_lock:
-                            self.connection = pika.BlockingConnection(parameters=self.parameters)
-                            self.channel = self.connection.channel()
-                            result = self.channel.queue_declare('', exclusive=True)
-                            self.callback_queue = result.method.queue
-                            self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
+                    with self.internal_lock:
+                        self.connection = pika.BlockingConnection(parameters=self.parameters)
+                        self.channel = self.connection.channel()
+                        result = self.channel.queue_declare('', exclusive=True)
+                        self.callback_queue = result.method.queue
+                        self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
             except pika.exceptions.AMQPError:
-                traceback.print
+                traceback.print_exc()
                 time.sleep(5)
                 continue
 
     def _on_response(self, ch, method, props, body):
         self.queue[props.correlation_id] = body
 
-    def send_request(self, rpc_queue, payload):
+    def send_request(self, rpc_queue, payload, timeout):
         corr_id = str(uuid.uuid4())
         with self.internal_lock:
             self.queue[corr_id] = None
@@ -56,12 +56,13 @@ class InnerRpcClient:
                 exchange='', routing_key=rpc_queue, properties=pika.BasicProperties(
                     reply_to=self.callback_queue,
                     correlation_id=corr_id,
+                    expiration=str(int(timeout * 1000)) if timeout else None
                 ), body=payload
             )
         return corr_id
 
     def call(self, rpc_queue, payload, timeout=0):
-        corr_id = self.send_request(rpc_queue, payload)
+        corr_id = self.send_request(rpc_queue, payload, timeout)
 
         if timeout:
             end = time.time() + timeout
