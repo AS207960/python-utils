@@ -28,18 +28,17 @@ class InnerRpcClient:
     def _process_data_events(self):
         while True:
             try:
-                try:
-                    while True:
-                        with self.internal_lock:
-                            self.connection.process_data_events()
-                        time.sleep(0.1)
-                except pika.exceptions.ConnectionClosed:
+                while True:
                     with self.internal_lock:
-                        self.connection = pika.BlockingConnection(parameters=self.parameters)
-                        self.channel = self.connection.channel()
-                        result = self.channel.queue_declare('', exclusive=True)
-                        self.callback_queue = result.method.queue
-                        self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
+                        try:
+                            self.connection.process_data_events()
+                        except pika.exceptions.AMQPConnectionError:
+                            self.connection = pika.BlockingConnection(parameters=self.parameters)
+                            self.channel = self.connection.channel()
+                            result = self.channel.queue_declare('', exclusive=True)
+                            self.callback_queue = result.method.queue
+                            self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
+                        time.sleep(0.1)
             except pika.exceptions.AMQPError:
                 traceback.print_exc()
                 time.sleep(5)
@@ -52,13 +51,28 @@ class InnerRpcClient:
         corr_id = str(uuid.uuid4())
         with self.internal_lock:
             self.queue[corr_id] = None
-            self.channel.basic_publish(
-                exchange='', routing_key=rpc_queue, properties=pika.BasicProperties(
-                    reply_to=self.callback_queue,
-                    correlation_id=corr_id,
-                    expiration=str(int(timeout * 1000)) if timeout else None
-                ), body=payload
-            )
+            try:
+                self.channel.basic_publish(
+                    exchange='', routing_key=rpc_queue, properties=pika.BasicProperties(
+                        reply_to=self.callback_queue,
+                        correlation_id=corr_id,
+                        expiration=str(int(timeout * 1000)) if timeout else None
+                    ), body=payload
+                )
+            except pika.exceptions.AMQPConnectionError:
+                self.connection = pika.BlockingConnection(parameters=self.parameters)
+                self.channel = self.connection.channel()
+                result = self.channel.queue_declare('', exclusive=True)
+                self.callback_queue = result.method.queue
+                self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
+                self.channel.basic_publish(
+                    exchange='', routing_key=rpc_queue, properties=pika.BasicProperties(
+                        reply_to=self.callback_queue,
+                        correlation_id=corr_id,
+                        expiration=str(int(timeout * 1000)) if timeout else None
+                    ), body=payload
+                )
+
         return corr_id
 
     def call(self, rpc_queue, payload, timeout=0):
