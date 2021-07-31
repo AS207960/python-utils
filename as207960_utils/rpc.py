@@ -38,7 +38,7 @@ class InnerRpcClient:
                             result = self.channel.queue_declare('', exclusive=True)
                             self.callback_queue = result.method.queue
                             self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
-                        time.sleep(0.1)
+                   time.sleep(0.1)
             except:
                 traceback.print_exc()
                 time.sleep(5)
