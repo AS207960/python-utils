@@ -42,7 +42,11 @@ class InnerRpcClient:
             except:
                 traceback.print_exc()
                 time.sleep(5)
-                continue
+                self.connection = pika.BlockingConnection(parameters=self.parameters)
+                self.channel = self.connection.channel()
+                result = self.channel.queue_declare('', exclusive=True)
+                self.callback_queue = result.method.queue
+                self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
 
     def _on_response(self, ch, method, props, body):
         self.queue[props.correlation_id] = body
