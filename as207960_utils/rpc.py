@@ -63,7 +63,7 @@ class InnerRpcClient:
                         expiration=str(int(timeout * 1000)) if timeout else None
                     ), body=payload
                 )
-            except pika.exceptions.AMQPConnectionError:
+            except (pika.exceptions.AMQPConnectionError, pika.exceptions.ChannelWrongStateError):
                 self.connection = pika.BlockingConnection(parameters=self.parameters)
                 self.channel = self.connection.channel()
                 result = self.channel.queue_declare('', exclusive=True)
