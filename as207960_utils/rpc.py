@@ -12,9 +12,11 @@ class TimeoutError(Exception):
 
 class InnerRpcClient:
     internal_lock = threading.Lock()
+    should_exit = threading.Event()
     queue = {}
 
     def __init__(self):
+        self.parent_thread = threading.current_thread()
         self.parameters = pika.URLParameters(settings.RABBITMQ_RPC_URL)
         self.connection = pika.BlockingConnection(parameters=self.parameters)
         self.channel = self.connection.channel()
@@ -26,9 +28,13 @@ class InnerRpcClient:
         thread.start()
 
     def _process_data_events(self):
-        while True:
+        while not self.should_exit.is_set():
             try:
-                while True:
+                while not self.should_exit.is_set():
+                    if not self.parent_thread.is_alive():
+                        self.connection.close()
+                        self.should_exit.set()
+                        break
                     with self.internal_lock:
                         try:
                             self.connection.process_data_events()
@@ -97,6 +103,10 @@ class InnerRpcClient:
         del self.queue[corr_id]
         return val
 
+    def close(self):
+        self.connection.close()
+        self.should_exit.set()
+
 
 class RpcClient:
     def __init__(self):
@@ -114,3 +124,8 @@ class RpcClient:
     def call(self, *args, **kwargs):
         client = self.__get_client()
         return client.call(*args, **kwargs)
+
+    def close(self):
+        existing_client = getattr(self.storage, 'client', None)
+        if existing_client:
+            existing_client.close()
