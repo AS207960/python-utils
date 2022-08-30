@@ -17,6 +17,7 @@ class InnerRpcClient:
 
     def __init__(self):
         self.parent_thread = threading.current_thread()
+        self.is_main_thread = self.parent_thread == threading.main_thread()
         self.parameters = pika.URLParameters(settings.RABBITMQ_RPC_URL)
         self.connection = pika.BlockingConnection(parameters=self.parameters)
         self.channel = self.connection.channel()
@@ -32,7 +33,8 @@ class InnerRpcClient:
         while not self.should_exit.is_set():
             try:
                 while not self.should_exit.is_set():
-                    if not self.parent_thread.is_alive():
+                    if not self.parent_thread.is_alive() and not self.is_main_thread:
+                        print(f"RPC exiting ({self.parent_thread})", flush=True)
                         self.connection.close()
                         self.should_exit.set()
                         break
@@ -40,6 +42,8 @@ class InnerRpcClient:
                         try:
                             self.connection.process_data_events()
                         except pika.exceptions.AMQPConnectionError:
+                            traceback.print_exc()
+                            print(flush=True)
                             self.connection = pika.BlockingConnection(parameters=self.parameters)
                             self.channel = self.connection.channel()
                             result = self.channel.queue_declare('', exclusive=True)
@@ -48,6 +52,7 @@ class InnerRpcClient:
                     time.sleep(0.1)
             except:
                 traceback.print_exc()
+                print(flush=True)
                 time.sleep(5)
                 self.connection = pika.BlockingConnection(parameters=self.parameters)
                 self.channel = self.connection.channel()
@@ -60,6 +65,7 @@ class InnerRpcClient:
 
     def send_request(self, rpc_queue, payload, timeout):
         if not self.thread.is_alive():
+            self.parent_thread = threading.current_thread()
             self.connection = pika.BlockingConnection(parameters=self.parameters)
             self.channel = self.connection.channel()
             result = self.channel.queue_declare('', exclusive=True)
