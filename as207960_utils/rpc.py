@@ -34,7 +34,6 @@ class InnerRpcClient:
             try:
                 while not self.should_exit.is_set():
                     if not self.parent_thread.is_alive() and not self.is_main_thread:
-                        print(f"RPC exiting ({self.parent_thread})", flush=True)
                         self.connection.close()
                         self.should_exit.set()
                         break
@@ -42,8 +41,6 @@ class InnerRpcClient:
                         try:
                             self.connection.process_data_events()
                         except pika.exceptions.AMQPConnectionError:
-                            traceback.print_exc()
-                            print(flush=True)
                             self.connection = pika.BlockingConnection(parameters=self.parameters)
                             self.channel = self.connection.channel()
                             result = self.channel.queue_declare('', exclusive=True)
@@ -52,7 +49,6 @@ class InnerRpcClient:
                     time.sleep(0.1)
             except:
                 traceback.print_exc()
-                print(flush=True)
                 time.sleep(5)
                 self.connection = pika.BlockingConnection(parameters=self.parameters)
                 self.channel = self.connection.channel()
@@ -61,7 +57,6 @@ class InnerRpcClient:
                 self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
 
     def _on_response(self, ch, method, props, body):
-        print(props.correlation_id, body, flush=True)
         self.queue[props.correlation_id] = body
 
     def send_request(self, rpc_queue, payload, timeout):
@@ -82,7 +77,6 @@ class InnerRpcClient:
         with self.internal_lock:
             self.queue[corr_id] = None
             try:
-                print(self.callback_queue, flush=True)
                 self.channel.basic_publish(
                     exchange='', routing_key=rpc_queue, properties=pika.BasicProperties(
                         reply_to=self.callback_queue,
@@ -96,7 +90,6 @@ class InnerRpcClient:
                 result = self.channel.queue_declare('', exclusive=True)
                 self.callback_queue = result.method.queue
                 self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
-                print(self.callback_queue, flush=True)
                 self.channel.basic_publish(
                     exchange='', routing_key=rpc_queue, properties=pika.BasicProperties(
                         reply_to=self.callback_queue,
@@ -108,7 +101,6 @@ class InnerRpcClient:
         return corr_id
 
     def call(self, rpc_queue, payload, timeout=0):
-        print(self.parent_thread, self.thread, self.should_exit.is_set(), self.callback_queue, flush=True)
         corr_id = self.send_request(rpc_queue, payload, timeout)
 
         if timeout:
@@ -118,7 +110,6 @@ class InnerRpcClient:
 
         while self.queue[corr_id] is None:
             if end is not None and time.time() > end:
-                print(self.parent_thread, self.thread, self.should_exit.is_set(), self.callback_queue, flush=True)
                 raise TimeoutError()
 
             time.sleep(0.1)
