@@ -67,6 +67,7 @@ class InnerRpcClient:
     def send_request(self, rpc_queue, payload, timeout):
         if not self.thread.is_alive():
             self.parent_thread = threading.current_thread()
+            self.is_main_thread = self.parent_thread == threading.main_thread()
             self.connection = pika.BlockingConnection(parameters=self.parameters)
             self.channel = self.connection.channel()
             result = self.channel.queue_declare('', exclusive=True)
@@ -107,6 +108,7 @@ class InnerRpcClient:
         return corr_id
 
     def call(self, rpc_queue, payload, timeout=0):
+        print(self.parent_thread, self.thread, self.should_exit.is_set(), self.callback_queue, flush=True)
         corr_id = self.send_request(rpc_queue, payload, timeout)
 
         if timeout:
@@ -116,7 +118,7 @@ class InnerRpcClient:
 
         while self.queue[corr_id] is None:
             if end is not None and time.time() > end:
-                print(self.thread, self.should_exit.is_set(), self.callback_queue, flush=True)
+                print(self.parent_thread, self.thread, self.should_exit.is_set(), self.callback_queue, flush=True)
                 raise TimeoutError()
 
             time.sleep(0.1)
