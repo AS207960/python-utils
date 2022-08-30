@@ -61,6 +61,7 @@ class InnerRpcClient:
                 self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
 
     def _on_response(self, ch, method, props, body):
+        print(props.correlation_id, body, flush=True)
         self.queue[props.correlation_id] = body
 
     def send_request(self, rpc_queue, payload, timeout):
