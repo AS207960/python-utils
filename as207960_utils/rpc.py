@@ -11,11 +11,11 @@ class TimeoutError(Exception):
 
 
 class InnerRpcClient:
-    internal_lock = threading.Lock()
-    should_exit = threading.Event()
-    queue = {}
-
     def __init__(self):
+        self.internal_lock = threading.Lock()
+        self.should_exit = threading.Event()
+        self.queue = {}
+
         self.parent_thread = threading.current_thread()
         self.is_main_thread = self.parent_thread == threading.main_thread()
         self.parameters = pika.URLParameters(settings.RABBITMQ_RPC_URL)
