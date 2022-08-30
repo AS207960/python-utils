@@ -23,9 +23,10 @@ class InnerRpcClient:
         result = self.channel.queue_declare('', exclusive=True)
         self.callback_queue = result.method.queue
         self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
-        thread = threading.Thread(target=self._process_data_events)
-        thread.setDaemon(True)
-        thread.start()
+        self.should_exit.clear()
+        self.thread = threading.Thread(target=self._process_data_events)
+        self.thread.setDaemon(True)
+        self.thread.start()
 
     def _process_data_events(self):
         while not self.should_exit.is_set():
@@ -58,6 +59,17 @@ class InnerRpcClient:
         self.queue[props.correlation_id] = body
 
     def send_request(self, rpc_queue, payload, timeout):
+        if not self.thread.is_alive():
+            self.connection = pika.BlockingConnection(parameters=self.parameters)
+            self.channel = self.connection.channel()
+            result = self.channel.queue_declare('', exclusive=True)
+            self.callback_queue = result.method.queue
+            self.channel.basic_consume(self.callback_queue, self._on_response, auto_ack=True)
+            self.should_exit.clear()
+            self.thread = threading.Thread(target=self._process_data_events)
+            self.thread.setDaemon(True)
+            self.thread.start()
+
         corr_id = str(uuid.uuid4())
         with self.internal_lock:
             self.queue[corr_id] = None
