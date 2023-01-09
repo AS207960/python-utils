@@ -36,11 +36,14 @@ def sync_resource_to_keycloak(self, display_name, scopes, urn, view_name, super_
         self.resource_id = d['_id']
         super_save()
     else:
-        uma_client.resource_set_update(
-            token,
-            id=self.resource_id,
-            **create_kwargs
-        )
+        try:
+            uma_client.resource_set_update(
+                token,
+                id=self.resource_id,
+                **create_kwargs
+            )
+        except keycloak.exceptions.KeycloakClientError:
+            pass
 
 
 def delete_resource(resource_id):
