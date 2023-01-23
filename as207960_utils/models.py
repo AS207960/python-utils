@@ -5,6 +5,7 @@ from django.shortcuts import reverse
 from django.db import models
 from django import forms
 import uuid
+import keycloak.exceptions
 
 
 def sync_resource_to_keycloak(self, display_name, scopes, urn, view_name, super_save, args, kwargs):
