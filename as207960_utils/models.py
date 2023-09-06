@@ -28,7 +28,10 @@ def sync_resource_to_keycloak(self, display_name, scopes, urn, view_name, super_
 
     if created or not self.resource_id:
         if self.user:
-            create_kwargs['owner'] = self.user.username
+            if isintance(self.user, str):
+                create_kwargs['owner'] = self.user
+            else:
+                create_kwargs['owner'] = self.user.username
 
         d = uma_client.resource_set_create(
             token,
