@@ -118,8 +118,12 @@ class SessionAuthentication(authentication.BaseAuthentication):
 
         return user, OAuthToken(token=token, claims=claims)
 
-    def enforce_csrf(self, request):
-        check = authentication.CSRFCheck()
+    @staticmethod
+    def enforce_csrf(request):
+        def dummy_get_response(_):
+            return None
+
+        check = authentication.CSRFCheck(dummy_get_response)
         check.process_request(request)
         reason = check.process_view(request, None, (), {})
         if reason:
