@@ -1,0 +1,4 @@
+Django
+git+https://github.com/TheEnbyperor/django-keycloak-auth@
+djangorestframework
+requests

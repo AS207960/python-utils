@@ -5,6 +5,7 @@ from django.shortcuts import reverse
 from django.db import models
 from django import forms
 import uuid
+import json
 import keycloak.exceptions
 
 
