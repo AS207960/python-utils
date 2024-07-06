@@ -3,7 +3,6 @@ import threading
 import time
 import uuid
 import traceback
-from django.conf import settings
 
 
 class TimeoutError(Exception):
@@ -11,14 +10,19 @@ class TimeoutError(Exception):
 
 
 class InnerRpcClient:
-    def __init__(self):
+    def __init__(self, connection_url=None):
+        if connection_url:
+            self.parameters = pika.URLParameters(connection_url)
+        else:
+            from django.conf import settings
+            self.parameters = pika.URLParameters(settings.RABBITMQ_RPC_URL)
+
         self.internal_lock = threading.Lock()
         self.should_exit = threading.Event()
         self.queue = {}
 
         self.parent_thread = threading.current_thread()
         self.is_main_thread = self.parent_thread == threading.main_thread()
-        self.parameters = pika.URLParameters(settings.RABBITMQ_RPC_URL)
         self.connection = pika.BlockingConnection(parameters=self.parameters)
         self.channel = self.connection.channel()
         result = self.channel.queue_declare('', exclusive=True)
