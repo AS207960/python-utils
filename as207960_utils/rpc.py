@@ -128,15 +128,16 @@ class InnerRpcClient:
 
 
 class RpcClient:
-    def __init__(self):
+    def __init__(self, connection_url=None):
         self.storage = threading.local()
+        self.connection_url = connection_url
 
     def __get_client(self):
         existing_client = getattr(self.storage, 'client', None)
         if existing_client:
             return existing_client
         else:
-            new_client = InnerRpcClient()
+            new_client = InnerRpcClient(self.connection_url)
             self.storage.client = new_client
             return new_client
 

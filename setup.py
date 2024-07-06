@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
       name='as207960-python-utils',
-      version='1.3',
+      version='1.4',
       author='Q 🦄',
       author_email='q@magicalcodewit.ch',
       install_requires=[
